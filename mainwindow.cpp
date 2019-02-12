@@ -7,15 +7,6 @@ MainWindow::MainWindow(QWidget *parent) :
 {
     ui->setupUi(this);
 
-    ui->groupBox->hide();
-    ui->groupBox_2->hide();
-
-    ui->doubleSpinBox->setMaximum(1.0);
-    ui->doubleSpinBox->setMaximum(1.0);
-
-    ui->doubleSpinBox_4->setMaximum(1.0);
-    ui->doubleSpinBox_4->setMaximum(1.0);
-
     ui->spinBox->setRange(0,255);
     ui->spinBox_2->setRange(0,255);
     ui->spinBox_3->setRange(0,255);
@@ -34,45 +25,48 @@ MainWindow::~MainWindow()
 
 #include <fstream>
 #include <cmath>
+#include <new>
 
 struct Scene;
 struct Object;
 struct HitInfo;
 struct Color;
 struct Raytracer;
+struct IMaterial;
+struct Phong;
 void clamp255(Color& col);
 
 struct Vec3
 {
-  double x,y,z;
-  Vec3(double x, double y, double z) : x(x), y(y), z(z) {}
-  Vec3 operator + (const Vec3& v) const { return Vec3(x+v.x, y+v.y, z+v.z); }
-  Vec3 operator - (const Vec3& v) const { return Vec3(x-v.x, y-v.y, z-v.z); }
-  Vec3 operator - () const { return Vec3(-x, -y, -z); }
-  Vec3 operator * (double d) const { return Vec3(x*d, y*d, z*d); }
-  Vec3 operator / (double d) const { return Vec3(x/d, y/d, z/d); }
+    double x,y,z;
+    Vec3(double x = 0, double y = 0, double z = 0) : x(x), y(y), z(z) {}
+    Vec3 operator + (const Vec3& v) const { return Vec3(x+v.x, y+v.y, z+v.z); }
+    Vec3 operator - (const Vec3& v) const { return Vec3(x-v.x, y-v.y, z-v.z); }
+    Vec3 operator - () const { return Vec3(-x, -y, -z); }
+    Vec3 operator * (double d) const { return Vec3(x*d, y*d, z*d); }
+    Vec3 operator / (const Vec3& v) { return Vec3(x/v.x, y/v.y, z/v.z); }
+    Vec3 operator / (double d) const { return Vec3(x/d, y/d, z/d); }
 
-  double lenght() const
-  {
+    double lenght() const
+    {
       return sqrt(x*x + y*y + z*z);
-  }
-  Vec3 normalize() const
-  {
+    }
+    Vec3 normalize() const
+    {
     double mg = lenght();
     return Vec3(x/mg,y/mg,z/mg);
-  }
-  double lenghtPow() const
-  {
+    }
+    double lenghtPow() const
+    {
       return (x*x+y*y+z*z);
-  }
+    }
 
-  Vec3 cross(Vec3 v)
-  {
-   return Vec3((y * v.z) - (z * v.y),
+    Vec3 cross(Vec3 v)
+    {
+    return Vec3((y * v.z) - (z * v.y),
                (z * v.x) - (x * v.z),
                (x * v.y) - (y * v.x));
-  }
-
+    }
 };
 
 inline double dot(const Vec3& a, const Vec3& b)
@@ -91,12 +85,14 @@ const Vec3 emptyVec3 = Vec3(0,0,0);
 struct Vec2
 {
   double x,y;
-  Vec2(double x, double y) : x(x), y(y) {}
+  Vec2(double x = 0, double y = 0) : x(x), y(y) {}
   Vec2 operator + (const Vec2& v) const { return Vec2(x+v.x, y+v.y); }
   Vec2 operator - (const Vec2& v) const { return Vec2(x-v.x, y-v.y); }
   Vec2 operator * (double d) const { return Vec2(x*d, y*d); }
   Vec2 operator / (double d) const { return Vec2(x/d, y/d); }
 };
+
+
 
 struct Ray
 {
@@ -179,6 +175,66 @@ inline Vec3 operator * (OrthonormalBasis onb, Vec3 v)
     return (onb.u * v.x + onb.v * v.y + onb.w * v.z);
 }
 
+struct Triangle
+{
+    Vec3 a;
+    Vec3 b;
+    Vec3 c;
+    Triangle(Vec3 a = emptyVec3, Vec3 b = emptyVec3, Vec3 c = emptyVec3) : a(a), b(b), c(c){}
+};
+
+bool rayIntersectsTriangle(Ray ray, Triangle inTriangle, double& outIntersectionPoint, Vec3& normal)
+{
+    double EPSILON = 0.00000000001;
+
+    Vec3 vertex0 = inTriangle.a;
+    Vec3 vertex1 = inTriangle.b;
+    Vec3 vertex2 = inTriangle.c;
+
+    Vec3 edge1, edge2, h, s, q;
+
+    double a,f,u,v;
+
+    edge1 = vertex1 - vertex0;
+    edge2 = vertex2 - vertex0;
+
+    h = ray.d.cross(edge2);
+    a = dot(edge1,h);
+
+    if (a > -EPSILON && a < EPSILON)
+    {
+       return false;    // This ray is parallel to this triangle.
+    }
+
+    f = 1.0/a;
+    s = ray.o - vertex0;
+    u = f * (dot(s,h));
+
+    if (u < 0.0 || u > 1.0)
+    {
+        return false;
+    }
+
+    q = s.cross(edge1);
+    v = f * dot(ray.d,q);
+    if (v < 0.0 || (u + v) > 1.0)
+    {
+        return false;
+    }
+    // At this stage we can compute t to find out where the intersection point is on the line.
+    double t = f * dot(edge2,q);
+    if (t > EPSILON) // ray intersection
+    {
+        outIntersectionPoint = t;
+        normal = (edge1.cross(edge2)).normalize();
+        return true;
+    }
+    else // This means that there is a line intersection but not a ray intersection.
+    {
+        return false;
+    }
+}
+
 struct Orthogonal : public ICamera
 {
     Vec3 EyePosition;
@@ -234,18 +290,224 @@ struct HitInfo
     Ray ray = Ray(emptyVec3,emptyVec3);
 };
 
+/*struct ISampleGenerator
+{
+    virtual Vec2* Sample(int count) = 0;
+    virtual ~ISampleGenerator();
+};
+
+struct Jittered : ISampleGenerator
+{
+    Jittered(int seed)
+    {
+        srand(seed);
+    }
+
+    Vec2* Sample(int count)
+    {
+        int sampleRow = int(sqrt(count));
+        Vec2* result = new Vec2[sampleRow * sampleRow];
+        for (int x = 0; x < sampleRow; x++)
+        {
+            for (int y = 0; y < sampleRow; y++)
+            {
+                double fracX = (x + (double(rand())/RAND_MAX)) / sampleRow;
+                double fracY = (y + (double(rand())/RAND_MAX)) / sampleRow;
+                *(result+(x * sampleRow + y)) = Vec2(fracX, fracY);
+            }
+        }
+    return result;
+    }
+};
+
+struct ISampleDistributor
+{
+   virtual Vec2 MapSample(Vec2 sample) = 0;
+   virtual ~ISampleDistributor();
+};
+
+struct SquareDistributor : ISampleDistributor
+{
+    Vec2 MapSample(Vec2 sample){ return sample; }
+};*/
+
 struct IMaterial
 {
    virtual Color shade(Raytracer* tracer, HitInfo hit) = 0;
 };
 
+struct Box
+{
+    Vec3 minV;
+    Vec3 maxV;
+    Box(Vec3 minV, Vec3 maxV) : minV(minV), maxV(maxV) {}
+    Box() : minV(emptyVec3), maxV(emptyVec3) {}
+};
+
 struct Object
 {
+    Box BVH;
     Object(IMaterial* material):material(material){}
+    Object(IMaterial* material, QVector <Triangle> triangles):material(material),triangles(triangles){}
     IMaterial* material;
-    virtual IMaterial* getMaterial() = 0;
-    virtual bool intersect(const Ray& ray, double &t, Vec3& normal) = 0;
-    virtual ~Object(){}
+    QVector <Triangle> triangles;
+    // Repair!
+    void setVecMinAndMax()
+    {
+        double minX = triangles[0].a.x;
+        for(int i = 0; i < triangles.size(); ++i)
+        {
+            if(triangles[i].a.x < minX)
+            {
+                minX = triangles[i].a.x;
+            }
+            if(triangles[i].b.x < minX)
+            {
+                minX = triangles[i].b.x;
+            }
+            if(triangles[i].c.x < minX)
+            {
+                minX = triangles[i].c.x;
+            }
+        }
+        double minY = triangles[0].a.y;
+        for(int i = 0; i < triangles.size(); ++i)
+        {
+            if(triangles[i].a.y < minY)
+            {
+                minY = triangles[i].a.y;
+            }
+            if(triangles[i].b.y < minY)
+            {
+                minY = triangles[i].b.y;
+            }
+            if(triangles[i].c.y < minY)
+            {
+                minY = triangles[i].c.y;
+            }
+        }
+        double minZ = triangles[0].a.z;
+        for(int i = 0; i < triangles.size(); ++i)
+        {
+            if(triangles[i].a.z < minZ)
+            {
+                minZ = triangles[i].a.z;
+            }
+            if(triangles[i].b.z < minZ)
+            {
+                minZ = triangles[i].b.z;
+            }
+            if(triangles[i].c.z < minZ)
+            {
+                minZ = triangles[i].c.z;
+            }
+        }
+
+        double maxX = triangles[0].a.x;
+        for(int i = 0; i < triangles.size(); ++i)
+        {
+            if(triangles[i].a.x > maxX)
+            {
+                maxX = triangles[i].a.x;
+            }
+            if(triangles[i].b.x > maxX)
+            {
+                maxX = triangles[i].b.x;
+            }
+            if(triangles[i].c.x > maxX)
+            {
+                maxX = triangles[i].c.x;
+            }
+        }
+        double maxY = triangles[0].a.y;
+        for(int i = 0; i < triangles.size(); ++i)
+        {
+            if(triangles[i].a.y > maxY)
+            {
+                maxY = triangles[i].a.y;
+            }
+            if(triangles[i].b.y > maxY)
+            {
+                maxY = triangles[i].b.y;
+            }
+            if(triangles[i].c.y > maxY)
+            {
+                maxY = triangles[i].c.y;
+            }
+        }
+        double maxZ = triangles[0].a.z;
+        for(int i = 0; i < triangles.size(); ++i)
+        {
+            if(triangles[i].a.z > maxZ)
+            {
+                maxZ = triangles[i].a.z;
+            }
+            if(triangles[i].b.z > maxZ)
+            {
+                maxZ = triangles[i].b.z;
+            }
+            if(triangles[i].c.z > maxZ)
+            {
+                maxZ = triangles[i].c.z;
+            }
+        }
+        BVH = Box(Vec3(minX,minY,minZ),Vec3(maxX,maxY,maxZ));
+    }
+
+    bool hit(Ray ray)
+    {
+        double tmin = (BVH.minV.x - ray.o.x) / ray.d.x;
+        double tmax = (BVH.maxV.x - ray.o.x) / ray.d.x;
+
+        if (tmin > tmax)
+        {
+            double buf = tmax;
+            tmax = tmin;
+            tmin = buf;
+        }
+
+        double tymin = (BVH.minV.y - ray.o.y) / ray.d.y;
+        double tymax = (BVH.maxV.y - ray.o.y) / ray.d.y;
+
+        if (tymin > tymax)
+        {
+            double buf = tymax;
+            tymax = tymin;
+            tymin = buf;
+        }
+
+        if ((tmin > tymax) || (tymin > tmax))
+            return false;
+
+        if (tymin > tmin)
+            tmin = tymin;
+
+        if (tymax < tmax)
+            tmax = tymax;
+
+        double tzmin = (BVH.minV.z - ray.o.z) / ray.d.z;
+        double tzmax = (BVH.maxV.z - ray.o.z) / ray.d.z;
+
+        if (tzmin > tzmax)
+        {
+            double buf = tzmax;
+            tzmax = tzmin;
+            tzmin = buf;
+        }
+
+        if ((tmin > tzmax) || (tzmin > tmax))
+            return false;
+
+        if (tzmin > tmin)
+            tmin = tzmin;
+
+        if (tzmax < tmax)
+            tmax = tzmax;
+
+        return true;
+    }
+    IMaterial* getMaterial() { return material; }
+    ~Object(){}
 };
 
 struct Scene
@@ -275,11 +537,17 @@ struct Scene
 
         for( int i = 0; i < objects.size(); ++i)
         {
-            if (objects[i]->intersect(ray, hitDistance, normal) && hitDistance < minimalDistance) // jeśli najbliższe trafienie
+            if(objects[i]->hit(ray))
             {
-                minimalDistance = hitDistance; // nowa najmniejsza odległość
-                result.hitObject = objects[i]; // zapisz kolor trafionego obiektu
-                result.normal = normal;
+                for(int j = 0; j < objects[i]->triangles.size(); ++j)
+                {
+                    if (rayIntersectsTriangle(ray,objects[i]->triangles[j],hitDistance,normal) && hitDistance < minimalDistance) // jeśli najbliższe trafienie
+                    {
+                        minimalDistance = hitDistance; // nowa najmniejsza odległość
+                        result.hitObject = objects[i]; // zapisz kolor trafionego obiektu
+                        result.normal = normal;
+                    }
+                }
             }
         }
 
@@ -308,78 +576,22 @@ struct Scene
      // jeśli jakiś obiekt jest na drodze promienia oraz trafienie
      // nastąpiło bliżej niż odległość punktu do światła,
      // obiekt jest w cieniu
-        if ((objects[i]->intersect(ray, currDistance, ignored)) && (currDistance < distAB))
-        {
-            return true;
-        }
+         if(objects[i]->hit(ray))
+         {
+             for(int j = 0; j < objects[i]->triangles.size(); ++j)
+             {
+                 if (rayIntersectsTriangle(ray,objects[i]->triangles[j],currDistance,ignored) && currDistance < distAB) // jeśli najbliższe trafienie
+                 {
+                     return true;
+                 }
+             }
+         }
      }
      // obiekt nie jest w cieniu
      return false;
     }
 };
 
-struct Raytracer
-{
-    int maxDepth;
-
-    Raytracer(int maxDepth)
-    {
-        this->maxDepth = maxDepth;
-    }
-
-    void raytrace(Scene* scene, ICamera* camera, int w, int h, QImage* paper)
-    {
-        uchar* ptr;
-        for(int y = 0; y < h; y++)
-        {
-            ptr = paper->scanLine(y);
-            for (int x = 0; x < w; x++)
-            {
-                // przeskalowanie x i y do zakresu [-1; 1]
-                Vec2 pictureCoordinates = Vec2(
-                ((x + 0.5) / (double)w) * 2 - 1,
-                ((y + 0.5) / (double)h) * 2 - 1);
-                // wysłanie promienia i sprawdzenie w co właściwie trafił
-                Ray ray = camera->GetRayTo(pictureCoordinates);
-                HitInfo info = scene->traceRay(ray);
-                // ustawienie odpowiedniego koloru w obrazie wynikowym
-                Color color = black;
-                if (info.hitObject)
-                {
-                    color = shadeRay(scene, ray, 0);
-                    clamp255(color);
-                }
-                else
-                {
-                    color = scene->background ;
-                }
-
-
-                ptr[4*x] = uchar(color.getBlue());      //b
-                ptr[4*x+1] = uchar(color.getGreen());   //g
-                ptr[4*x+2] = uchar(color.getRed());     //r
-            }
-        }
-    }
-
-    Color shadeRay(Scene* scene, Ray ray, int currentDepth)
-    {
-        if(currentDepth > maxDepth)
-        {
-            return black;
-        }
-        HitInfo info = scene->traceRay(ray);
-        info.depth = currentDepth + 1;
-
-        if (info.hitObject == NULL)
-        {
-            return scene->background;
-        }
-        IMaterial* material = info.hitObject->material;
-
-        return material->shade(this, info);
-    }
-};
 
 struct PerfectDiffuse : IMaterial
 {
@@ -407,6 +619,74 @@ struct PerfectDiffuse : IMaterial
     }
 
 };
+
+struct Raytracer : public MainWindow
+{
+    int maxDepth;
+
+    Raytracer(int maxDepth)
+    {
+        this->maxDepth = maxDepth;
+    }
+
+    void raytrace(Scene* scene, ICamera* camera, int w, int h, QImage* paper)
+    {
+        uchar* ptr;
+        for(int y = 0; y < h; y++)
+        {
+            ptr = paper->scanLine(y);
+            for (int x = 0; x < w; x++)
+            {
+                // przeskalowanie x i y do zakresu [-1; 1]
+                Vec2 pictureCoordinates = Vec2(
+                ((x + 0.5) / (double)w) * 2 - 1,
+                ((y + 0.5) / (double)h) * 2 - 1);
+                // wysłanie promienia i sprawdzenie w co właściwie trafił
+                Ray ray = camera->GetRayTo(pictureCoordinates);
+                HitInfo info = scene->traceRay(ray);
+                // ustawienie odpowiedniego koloru w obrazie wynikowym
+                Color color = black;
+                if (info.hitObject != NULL)
+                {
+                    color = shadeRay(scene,ray,0);
+                    clamp255(color);
+                }
+                else
+                {
+                    color = scene->background ;
+                }
+
+
+                ptr[4*x] = uchar(color.getBlue());      //b
+                ptr[4*x+1] = uchar(color.getGreen());   //g
+                ptr[4*x+2] = uchar(color.getRed());     //r
+            }
+            if(y%4==0)
+            {
+                qDebug() << y/4 + 1 << "%";
+            }
+        }
+    }
+
+    Color shadeRay(Scene* scene, Ray ray, int currentDepth)
+    {
+        if(currentDepth > maxDepth)
+        {
+            return black;
+        }
+        HitInfo info = scene->traceRay(ray);
+        info.depth = currentDepth + 1;
+
+        if (info.hitObject == NULL)
+        {
+            return scene->background;
+        }
+        IMaterial* material = new PerfectDiffuse(gray);
+
+        return material->shade(this, info);
+    }
+};
+
 
 struct Phong : public IMaterial
 {
@@ -525,7 +805,7 @@ IMaterial* greenMat = new PerfectDiffuse(green);
 IMaterial* blueMat = new PerfectDiffuse(blue);
 IMaterial* grayMat = new PerfectDiffuse(gray);
 
-struct Sphere : public Object
+/*struct Sphere : public Object
 {
     Vec3 center;
     double r;
@@ -562,9 +842,9 @@ struct Sphere : public Object
     {
         return material;
     }
-};
+};*/
 
-struct Plane : public Object
+/*struct Plane : public Object
 {
     /// <summary>Punkt przez który płaszczyzna przechodzi</summary>
     Vec3 point = emptyVec3;
@@ -598,7 +878,7 @@ struct Plane : public Object
     {
         return material;
     }
-};
+};*/
 
 
 void clamp255(Color& col)
@@ -608,18 +888,109 @@ void clamp255(Color& col)
     col.blue = (col.blue > 1) ? 1 : (col.blue < 0) ? 0 : col.blue;
 }
 
+bool loadOBJ(std::string filepath, QVector<Vec3>& vortex, QVector<Vec2>& uvs, QVector<Vec3>& normal)
+{
+
+    FILE* file = fopen(filepath.c_str(), "r");
+    if( file == NULL )
+    {
+        qDebug() << "Impossible to open the file !\n";
+        return false;
+    }
+
+    QVector< unsigned int > vertexIndices, uvIndices, normalIndices;
+    QVector< Vec3 > temp_vertices;
+    QVector< Vec2 > temp_uvs;
+    QVector< Vec3 > temp_normals;
+
+    while( 1 )
+    {
+
+        char lineHeader[128];
+        // read the first word of the line
+        int res = fscanf(file, "%s", lineHeader);
+        if (res == EOF)
+            break; // EOF = End Of File. Quit the loop.
+
+        // else : parse lineHeader
+        if ( strcmp( lineHeader, "v" ) == 0 )
+        {
+            Vec3 vertex;
+            fscanf(file, "%lf %lf %lf\n", &vertex.x, &vertex.y, &vertex.z );
+            temp_vertices.push_back(vertex);
+        }
+        else if ( strcmp( lineHeader, "vn" ) == 0 )
+        {
+            Vec3 normal;
+            fscanf(file, "%f %f %f\n", &normal.x, &normal.y, &normal.z );
+            temp_normals.push_back(normal);
+        }
+        else if ( strcmp( lineHeader, "f" ) == 0 )
+        {
+            unsigned int vertexIndex[3];// uvIndex[3], normalIndex[3], ignore1, ignore2, ignore3;
+            int matches = fscanf(file, "%d/%d/%d\n",
+                                 &vertexIndex[0],// &uvIndex[0], &normalIndex[0],
+                                 &vertexIndex[1],// &uvIndex[1], &normalIndex[1],
+                                 &vertexIndex[2]);// &uvIndex[2], &normalIndex[2]);
+            if (matches != 3)
+            {
+                qDebug() << matches ;
+                qDebug() << "File can't be read by our simple parser : ( Try exporting with other options\n";
+                return false;
+            }
+
+            vertexIndices.push_back(vertexIndex[0]);
+            vertexIndices.push_back(vertexIndex[1]);
+            vertexIndices.push_back(vertexIndex[2]);
+            //uvIndices    .push_back(uvIndex[0]);
+           // uvIndices    .push_back(uvIndex[1]);
+           // uvIndices    .push_back(uvIndex[2]);
+           // normalIndices.push_back(normalIndex[0]);
+            //normalIndices.push_back(normalIndex[1]);
+           // normalIndices.push_back(normalIndex[2]);
+        }
+
+        for( unsigned int i = 0; i < vertexIndices.size(); i++ )
+        {
+            unsigned int vertexIndex = vertexIndices[i] - 1;
+            vortex.push_back(temp_vertices[ vertexIndex ]);
+        }
+    }
+    fclose(file);
+    return true;
+}
 
 Scene* scene = new Scene(Color(0,100/255.0,170/255.0));
 
 void MainWindow::raytracing()
 {
-  scene->addLight(new PointLight(Vec3(0, 5, -5), white));
+  scene->addLight(new PointLight(Vec3(4, 3, -5), white));
 
-  scene->addObj(new Plane(Vec3(0,-2,0),Vec3(0,1,0),grayMat));
+  ICamera* camera = new Pinhole(Vec3(1, 2, -5),Vec3(0, 0, 0),Vec3(0, -1, 0),1);
 
-  ICamera* camera = new Pinhole(Vec3(0, 1, -5),Vec3(0, 0, 0),Vec3(0, -1, 0),1);
+  Raytracer* tracer = new Raytracer(1);
 
-  Raytracer* tracer = new Raytracer(5);
+  QVector <Vec3> test1;
+  QVector <Vec2> test2;
+  QVector <Vec3> test3;
+  if(!loadOBJ("./obj2/cow.obj",test1,test2,test3))
+  {
+      qDebug() << "OBJ error";
+      return;
+  };
+  qDebug() << "OBJ loaded";
+
+  QVector <Triangle> vortexs;
+  for(int i = 0; i < (test1.size() / 3); ++i)
+  {
+          vortexs.push_back( Triangle(test1[(i * 3) + 0],
+                                      test1[(i * 3) + 1],
+                                      test1[(i * 3) + 2]) );
+  }
+
+  Object* obj = new Object(grayMat,vortexs);
+  obj->setVecMinAndMax();
+  scene->addObj(obj);
 
   tracer->raytrace(scene, camera, W, H, paper);
 
@@ -658,142 +1029,14 @@ void MainWindow::on_pushButton_clicked()
  * ICamera* camera = new Pinhole(Vec3(0, 1, -5),Vec3(0, 0, 0),Vec3(0, -1, 0),1);
 */
 
-void MainWindow::on_comboBox_currentIndexChanged(int index)
-{
-    if(index == 0)
-    {
-        ui->groupBox->hide();
-        ui->groupBox_2->hide();
-    }
-    else if (index == 1)
-    {
-        ui->groupBox->show();
-        ui->groupBox_2->hide();
-    }
-    else
-    {
-        ui->groupBox->show();
-        ui->groupBox_2->show();
-    }
-}
-
-void MainWindow::on_pushButton_2_clicked()
-{
-    switch(ui->comboBox->currentIndex())
-    {
-        case 0:
-        scene->addObj(new Sphere(Vec3(ui->spinBox_5->value(),
-                                      ui->spinBox_6->value(),
-                                      ui->spinBox_7->value()),
-                                 ui->spinBox_4->value(),
-                                 new PerfectDiffuse(Color(ui->spinBox->value() / 255.0,
-                                                          ui->spinBox_2->value() / 255.0,
-                                                          ui->spinBox_3->value() / 255.0 ))));
-            break;
-        case 1:
-        scene->addObj(new Sphere(Vec3(ui->spinBox_5->value(),
-                                      ui->spinBox_6->value(),
-                                      ui->spinBox_7->value()),
-                                 ui->spinBox_4->value(),
-                                 new Phong(Color(ui->spinBox->value() / 255.0,
-                                                 ui->spinBox_2->value() / 255.0,
-                                                 ui->spinBox_3->value() / 255.0 ),
-                                           ui->doubleSpinBox->value(),
-                                           ui->doubleSpinBox_2->value(),
-                                           ui->doubleSpinBox_3->value())));
-            break;
-        case 2:
-        scene->addObj(new Sphere(Vec3(ui->spinBox_5->value(),
-                                      ui->spinBox_6->value(),
-                                      ui->spinBox_7->value()),
-                                 ui->spinBox_4->value(),
-                                 new Reflective(Color(ui->spinBox->value() / 255.0,
-                                                      ui->spinBox_2->value() / 255.0,
-                                                      ui->spinBox_3->value() / 255.0 ),
-                                                ui->doubleSpinBox->value(),
-                                                ui->doubleSpinBox_2->value(),
-                                                ui->doubleSpinBox_3->value(),
-                                                ui->doubleSpinBox_4->value())));
-            break;
-    }
-}
-
 void MainWindow::on_pushButton_3_clicked()
 {
     scene = new Scene(Color(0,100/255.0,170/255.0));
 
     ICamera* camera = new Pinhole(Vec3(0, 1, -5),Vec3(0, 0, 0),Vec3(0, -1, 0),1);
 
-    Raytracer* tracer = new Raytracer(5);
+    Raytracer* tracer = new Raytracer(1);
 
-    switch(ui->comboBox_2->currentIndex())
-    {
-        case 0:
-            scene->addObj(new Sphere(Vec3(-4, 0, 0), 2, blueMat));
-            scene->addObj(new Sphere(Vec3(4, 0, 0), 2, greenMetal));
-            scene->addObj(new Sphere(Vec3(0, 0, 3), 2, redMir));
-            scene->addObj(new Plane(Vec3(0, -2, 0), Vec3(0, 1, 0), grayMir));
 
-            scene->addLight(new PointLight(Vec3(0, 5, -5), white));
-
-            tracer->raytrace(scene, camera, W, H, paper);
-
-            ui->label->setPixmap(QPixmap::fromImage(*paper));
-            break;
-        case 1:
-            scene->addObj(new Sphere(Vec3(0, 0, 0), 9, new Reflective(white,0,1,30,1)));
-            scene->addObj(new Sphere(Vec3(-4, 0, 0), 2, new Reflective(Color(51/255.0,1,1),0,1,30,1)));
-            scene->addObj(new Sphere(Vec3(4, 0, 0), 2, new Reflective(Color(1,178/255.0,102/255.0),0,1,30,1)));
-            scene->addObj(new Sphere(Vec3(0, 0, 3), 2, new Reflective(Color(0,153/255.0,76/255.0),0,1,30,1)));
-            scene->addObj(new Plane(Vec3(0, -2, 0), Vec3(0, 1, 0), grayMir));
-
-            scene->addLight(new PointLight(Vec3(0, 3, -3), white));
-            scene->addLight(new PointLight(Vec3(0, 3, 5), white));
-            scene->addLight(new PointLight(Vec3(3, 3, -3), white));
-            scene->addLight(new PointLight(Vec3(-3, 3, 5), white));
-
-            tracer->raytrace(scene, camera, W, H, paper);
-
-            ui->label->setPixmap(QPixmap::fromImage(*paper));
-            break;
-        case 2:
-            scene->addObj(new Sphere(Vec3(-4, 0, 0), 2, redMetal));
-            scene->addObj(new Sphere(Vec3(4, 0, 0), 2, blueMetal));
-            scene->addObj(new Sphere(Vec3(0, 0, 3), 2, greenMetal));
-            scene->addObj(new Plane(Vec3(0, -2, 0), Vec3(0, 1, 0), grayMat));
-
-            scene->addLight(new PointLight(Vec3(0, 3, -3), white));
-
-            tracer->raytrace(scene, camera, W, H, paper);
-
-            ui->label->setPixmap(QPixmap::fromImage(*paper));
-            break;
-        case 3:
-            scene->addObj(new Sphere(Vec3(-4, 0, 0), 2, redMat));
-            scene->addObj(new Sphere(Vec3(4, 0, 0), 2, blueMetal));
-            scene->addObj(new Sphere(Vec3(0, 0, 3), 2, greenMir));
-            scene->addObj(new Plane(Vec3(0, -2, 0), Vec3(0, 1, 0), grayMetal));
-
-            scene->addLight(new PointLight(Vec3(0, 3, -3), white));
-
-            tracer->raytrace(scene, camera, W, H, paper);
-
-            ui->label->setPixmap(QPixmap::fromImage(*paper));
-            break;
-        case 4:
-            scene->addObj(new Sphere(Vec3(-4, 0, 0), 2, redMetal));
-            scene->addObj(new Sphere(Vec3(4, 0, 0), 2, blueMetal));
-            scene->addObj(new Sphere(Vec3(0, 0, 3), 2, greenMetal));
-            scene->addObj(new Plane(Vec3(0, -2, 0), Vec3(0, 1, 0), grayMat));
-
-            scene->addLight(new PointLight(Vec3(0, 3, -3), white));
-
-            camera = new Pinhole(Vec3(0, 1, -5),Vec3(0, 0, 0),Vec3(1, -1, 0),1);
-
-            tracer->raytrace(scene, camera, W, H, paper);
-
-            ui->label->setPixmap(QPixmap::fromImage(*paper));
-            break;
-    }
 
 }

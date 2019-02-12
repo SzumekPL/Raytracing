@@ -22,18 +22,14 @@ public:
     const int W = 400;
 
     QImage* paper = new QImage(W,H,QImage::Format_RGB32);
+    Ui::MainWindow *ui;
 
 private slots:
     void on_pushButton_clicked();
 
-    void on_comboBox_currentIndexChanged(int index);
-
-    void on_pushButton_2_clicked();
-
     void on_pushButton_3_clicked();
 
 private:
-    Ui::MainWindow *ui;
 
     void raytracing();
 };
