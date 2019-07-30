@@ -1,10 +1,13 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include <QtMath>
+#include <QTime>
 #include <QMainWindow>
 #include <QImage>
 #include <QVector>
 #include <QDebug>
+#include <QRandomGenerator>
 
 namespace Ui {
 class MainWindow;
@@ -22,6 +25,7 @@ public:
     const int W = 400;
 
     QImage* paper = new QImage(W,H,QImage::Format_RGB32);
+
 
 private slots:
     void on_pushButton_clicked();
