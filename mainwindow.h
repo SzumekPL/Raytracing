@@ -18,8 +18,8 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
-    const int H = 400;
-    const int W = 400;
+    const int H = 1080;
+    const int W = 1920;
 
     QImage* paper = new QImage(W,H,QImage::Format_RGB32);
 

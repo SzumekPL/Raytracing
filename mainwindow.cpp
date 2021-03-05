@@ -24,6 +24,7 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->spinBox_6->setRange(-100,100);
     ui->spinBox_7->setRange(-100,100);
 
+    ui->label->setScaledContents(true);
     ui->label->setPixmap(QPixmap::fromImage(*paper));
 }
 
@@ -243,6 +244,7 @@ struct Object
 {
     Object(IMaterial* material):material(material){}
     IMaterial* material;
+    virtual Color getColorChecker(Vec3 hitPoint) = 0;
     virtual IMaterial* getMaterial() = 0;
     virtual bool intersect(const Ray& ray, double &t, Vec3& normal) = 0;
     virtual ~Object(){}
@@ -456,11 +458,11 @@ struct Phong : public IMaterial
                 continue;
             }
 
-            Color result = hit.scene->lights[i]->color * materialColor * diffuseFactor * diffuseCoeff;
+            Color result = hit.scene->lights[i]->color * hit.hitObject->getColorChecker(hit.hitPoint) * diffuseFactor * diffuseCoeff;
             double phongFactor = PhongFactor(inDirection, hit.normal, -hit.ray.d);
             if (phongFactor != 0.0)
             {
-                result = result + materialColor * specular * phongFactor;
+                result = result + hit.hitObject->getColorChecker(hit.hitPoint) * specular * phongFactor;
             }
             totalColor = totalColor + result;
         }
@@ -562,6 +564,31 @@ struct Sphere : public Object
     {
         return material;
     }
+
+    Color getColorChecker(Vec3 hitPoint)
+    {
+        float theta = atan2(hitPoint.x - this->center.x, hitPoint.z - this->center.z);
+
+        float radius = this->r;
+        float phi = acos((hitPoint.y - this->center.y) / radius);
+        if(phi < 0.0)
+            phi += 2*M_PI;
+        float raw_u = theta / (2 * M_PI);
+        float u = 1 - (raw_u + 0.5);
+        float v = 1 - phi / M_PI;
+        v = 1 - v;
+
+        Color result = white;
+        QPixmap img("./ziemia.png");
+        QImage real_img = img.toImage();
+        int x = round(u * (real_img.width() - 1));
+        int y = round(v * (real_img.height() - 1));
+        QColor color = real_img.pixelColor(x, y);
+        result.red = color.red()/255.0;
+        result.green = color.green()/255.0;
+        result.blue = color.blue()/255.0;
+        return result;
+    }
 };
 
 struct Plane : public Object
@@ -598,6 +625,67 @@ struct Plane : public Object
     {
         return material;
     }
+
+    Color getColorChecker(Vec3 hitPoint)
+    {
+        if(hitPoint.x >= 0 && hitPoint.z >= 0)
+        {
+            if((std::fmod(abs(hitPoint.x),1) >= 0.5 &&
+                std::fmod(abs(hitPoint.z),1) >= 0.5) ||
+                (std::fmod(abs(hitPoint.x),1) <= 0.5 &&
+                std::fmod(abs(hitPoint.z),1) <= 0.5))
+            {
+                return white;
+            }
+            else
+            {
+                return black;
+            }
+        }
+        else if(hitPoint.x >= 0 && hitPoint.z <= 0)
+        {
+            if((std::fmod(abs(hitPoint.x),1) >= 0.5 &&
+                std::fmod(abs(hitPoint.z),1) <= 0.5) ||
+                (std::fmod(abs(hitPoint.x),1) <= 0.5 &&
+                std::fmod(abs(hitPoint.z),1) >= 0.5))
+            {
+                return white;
+            }
+            else
+            {
+                return black;
+            }
+        }
+        else if(hitPoint.x <= 0 && hitPoint.z >= 0)
+        {
+            if((std::fmod(abs(hitPoint.x),1) <= 0.5 &&
+                std::fmod(abs(hitPoint.z),1) >= 0.5) ||
+                (std::fmod(abs(hitPoint.x),1) >= 0.5 &&
+                std::fmod(abs(hitPoint.z),1) <= 0.5))
+            {
+                return white;
+            }
+            else
+            {
+                return black;
+            }
+        }
+        else if(hitPoint.x <= 0 && hitPoint.z <= 0)
+        {
+            if((std::fmod(abs(hitPoint.x),1) >= 0.5 &&
+                std::fmod(abs(hitPoint.z),1) >= 0.5) ||
+                (std::fmod(abs(hitPoint.x),1) <= 0.5 &&
+                std::fmod(abs(hitPoint.z),1) <= 0.5))
+            {
+                return white;
+            }
+            else
+            {
+                return black;
+            }
+        }
+    }
+
 };
 
 
@@ -722,17 +810,15 @@ void MainWindow::on_pushButton_3_clicked()
 {
     scene = new Scene(Color(0,100/255.0,170/255.0));
 
-    ICamera* camera = new Pinhole(Vec3(0, 1, -5),Vec3(0, 0, 0),Vec3(0, -1, 0),1);
+    ICamera* camera = new Pinhole(Vec3(0, 1, -7),Vec3(0, 0, 0),Vec3(0, -1, 0),1);
 
     Raytracer* tracer = new Raytracer(5);
 
     switch(ui->comboBox_2->currentIndex())
     {
         case 0:
-            scene->addObj(new Sphere(Vec3(-4, 0, 0), 2, blueMat));
-            scene->addObj(new Sphere(Vec3(4, 0, 0), 2, greenMetal));
-            scene->addObj(new Sphere(Vec3(0, 0, 3), 2, redMir));
-            scene->addObj(new Plane(Vec3(0, -2, 0), Vec3(0, 1, 0), grayMir));
+            scene->addObj(new Sphere(Vec3(4, 1, 3), 3, grayMetal));
+            scene->addObj(new Plane(Vec3(0, -2, 0), Vec3(0, 1, 0), grayMetal));
 
             scene->addLight(new PointLight(Vec3(0, 5, -5), white));
 
@@ -771,10 +857,12 @@ void MainWindow::on_pushButton_3_clicked()
         case 3:
             scene->addObj(new Sphere(Vec3(-4, 0, 0), 2, redMat));
             scene->addObj(new Sphere(Vec3(4, 0, 0), 2, blueMetal));
-            scene->addObj(new Sphere(Vec3(0, 0, 3), 2, greenMir));
+            scene->addObj(new Sphere(Vec3(0, 0, 3), 2, whiteMir));
             scene->addObj(new Plane(Vec3(0, -2, 0), Vec3(0, 1, 0), grayMetal));
 
             scene->addLight(new PointLight(Vec3(0, 3, -3), white));
+
+            scene->addLight(new PointLight(Vec3(5, 7, 13), white));
 
             tracer->raytrace(scene, camera, W, H, paper);
 
