@@ -7,9 +7,8 @@ Phong
 Reflection
 
 Cameras:
-Pinhole
-
-Orthogonal
+Pinhole \n
+Orthogonal \n
 
 Futures:
 Point light
