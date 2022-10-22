@@ -289,8 +289,8 @@ struct Jittered : ISampleGenerator
         {
             for (int y = 0; y < sampleRow; y++)
             {
-                double fracX = (x + qrand()/double(RAND_MAX)) / sampleRow / double(qPow(2,x));
-                double fracY = (y + qrand()/double(RAND_MAX)) / sampleRow / double(qPow(2,x));
+                double fracX = ((x + QRandomGenerator::global()->generateDouble()) / sampleRow);
+                double fracY = ((y + QRandomGenerator::global()->generateDouble()) / sampleRow);
                 result[x * sampleRow + y] = Vec2(fracX, fracY);
             }
         }
@@ -313,8 +313,8 @@ struct NRooks : ISampleGenerator
         QVector<Vec2> samples = QVector<Vec2>(sampleCt);
         for (int i = 0; i < sampleCt; i++)
         {
-            samples[i] = Vec2((i + qrand()/double(RAND_MAX)) / sampleCt,
-                              (i + qrand()/double(RAND_MAX)) / sampleCt);
+            samples[i] = Vec2( QRandomGenerator::global()->generateDouble() / sampleCt,
+                               QRandomGenerator::global()->generateDouble() / sampleCt);
         }
 
         ShuffleX(samples, sampleCt);
@@ -325,7 +325,7 @@ struct NRooks : ISampleGenerator
     {
         for (int i = 0; i < sampleCt - 1; i++)
         {
-            int target = qrand() % sampleCt;
+            int target = QRandomGenerator::global()->generate() % sampleCt;
             double temp = samples[i].x;
             samples[i].x = samples[target].x;
             samples[target].x = temp;
@@ -738,7 +738,7 @@ struct Phong : public IMaterial
 
 };
 
-struct Reflective : IMaterial
+struct Reflective : public IMaterial
 {
     Phong direct = Phong(black,0,0,0); // do bezpośredniego oświetlenia
     double reflectivity;
@@ -997,13 +997,11 @@ void MainWindow::on_pushButton_3_clicked()
 
     Raytracer* tracer = new Raytracer(5);
 
-    const int SampleCt = 16;
+    const int SampleCt = 64;
 
-    qsrand(SampleCt);
+    Sampler antiAlias = Sampler(new NRooks(0), new SquareDistributor(), SampleCt, 100);
 
-    Sampler antiAlias = Sampler(new NRooks(0), new SquareDistributor(), SampleCt, 2); // na razie wystarczy jeden set
-
-    Sampler areaLightSampler = Sampler(new NRooks(0), new SquareDistributor(), SampleCt, 2);
+    Sampler areaLightSampler = Sampler(new NRooks(0), new SquareDistributor(), SampleCt, 100);
 
     QTime time;
 
@@ -1079,10 +1077,10 @@ void MainWindow::on_pushButton_3_clicked()
             break;
 
         case 3:
-            scene->addObj(new Sphere(Vec3(0, 1, 2), 1.7, new Reflective(orange, 0.95, 1, 500, 0.05)));
-            scene->addObj(new Plane(Vec3(0, 0, 0), Vec3(0, 1, 0), new Reflective(white, 1, 1, 300, 0.0)));
+            scene->addObj(new Sphere(Vec3(0, 1, 0), 2, new Reflective(orange, 1.0, 1, 300, 0.0)));
+            scene->addObj(new Plane(Vec3(0, 0, 0), Vec3(0, 1, 0), new Reflective(white, 1.0, 1, 300, 0.0)));
 
-            scene->addLight(new Light(Vec3(3, 3, 2), white, areaLightSampler, 2.3));
+            scene->addLight(new Light(Vec3(6, 2, 0), white, areaLightSampler, 2));
 
             tracer->raytrace(scene, camera, W, H, paper, antiAlias);
 ;
