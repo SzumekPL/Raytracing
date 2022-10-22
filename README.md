@@ -4,11 +4,11 @@ Raytracing w C++ wspomagany QT
 Materials:\
 Perfect Diffuse\
 Phong\
-Reflection\
+Reflection
 
 Cameras:\
 Pinhole\
-Orthogonal\
+Orthogonal
 
 Futures:\
 Point light\
